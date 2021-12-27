@@ -1,0 +1,11 @@
+{
+  "name": "draughts-backend",
+  "description": "Draughts with Pusher",
+  "website": "https://github.com/jnaudin/multi-draughts",
+  "repository": "https://github.com/jnaudin/multi-draughts",
+  "success_url": "/",
+  "keywords": [],
+  "scripts": {},
+  "addons": [],
+  "env": {}
+}
