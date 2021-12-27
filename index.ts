@@ -1,12 +1,13 @@
 import WebSocket, { WebSocketServer } from "ws";
 
-require("dotenv").config();
+import dotenv from "dotenv";
+dotenv.config();
 
 const PORT = Number(process.env.PORT) || 8999;
 
 //initialize the WebSocket server instance
-const wss = new WebSocketServer({ PORT });
-
+const wss = new WebSocketServer({ port: PORT });
+console.log("wss", wss)
 type GameType = {
   name: string;
   player1?: WebSocket;

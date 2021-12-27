@@ -7,5 +7,6 @@
   "keywords": [],
   "scripts": {},
   "addons": [],
-  "env": {}
+  "env": {},
+  "stack": "heroku-20"
 }
