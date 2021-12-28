@@ -1,10 +1,8 @@
 import WebSocket, { WebSocketServer } from "ws";
 import dotenv from "dotenv";
 dotenv.config();
-const PORT = Number(process.env.PORT) || 8999;
-//initialize the WebSocket server instance
-const wss = new WebSocketServer({ port: PORT });
-console.log("wss", wss);
+const port = Number(process.env.PORT) || 443;
+const wss = new WebSocketServer({ port });
 const games = [];
 const changeTurn = (game) => {
     game.turn = game.turn === "black" ? "white" : "black";
@@ -13,6 +11,7 @@ const sendGames = (ws) => {
     ws.send(`games-${games.map(({ name }) => name).join(",")}`);
 };
 wss.on("connection", (ws) => {
+    console.log("connexion");
     sendGames(ws);
     ws.on("message", (message) => {
         const [type, arg0] = message.toString().split("-");

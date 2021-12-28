@@ -1,13 +1,12 @@
 import WebSocket, { WebSocketServer } from "ws";
-
 import dotenv from "dotenv";
+
 dotenv.config();
 
-const PORT = Number(process.env.PORT) || 8999;
+const port = Number(process.env.PORT) || 443;
 
-//initialize the WebSocket server instance
-const wss = new WebSocketServer({ port: PORT });
-console.log("wss", wss)
+const wss = new WebSocketServer({ port });
+
 type GameType = {
   name: string;
   player1?: WebSocket;
@@ -26,6 +25,7 @@ const sendGames = (ws: WebSocket) => {
 };
 
 wss.on("connection", (ws: WebSocket) => {
+  console.log("connexion")
   sendGames(ws);
 
   ws.on("message", (message) => {
