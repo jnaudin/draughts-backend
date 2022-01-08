@@ -9,13 +9,17 @@ const wss = new WebSocketServer({ port });
 
 type GameType = {
   name: string;
+  type: "draughts" | "py";
+  game: DraughtsGameType | PyGameType;
+};
+
+type DraughtsGameType = {
   player1?: WebSocket;
   player2?: WebSocket;
   turn: "black" | "white";
 };
 
 type PyGameType = {
-  name: string;
   players: WebSocket[];
   guesser?: WebSocket;
   proposer?: WebSocket;
@@ -37,20 +41,24 @@ const words: WordType[] = [
 ];
 
 const games: GameType[] = [];
-const pyGames: PyGameType[] = [];
 
-const changeTurn = (game: GameType) => {
-  game.turn = game.turn === "black" ? "white" : "black";
-};
+const changeTurn = (g: GameType) =>
+  ({ black: "white", white: "black", guess: "propose", propose: "guess" }[
+    g.game.turn
+  ]);
 
-const changeTurnPy = (pyGame: PyGameType) => {
-  pyGame.turn = pyGame.turn === "guess" ? "propose" : "guess";
-};
-
-const sendGames = (ws: WebSocket, type = "") => {
+const sendGames = (ws: WebSocket, type: GameType["type"]) => {
   ws.send(
-    `${type ? `${type}-` : ""}games-${games.map(({ name }) => name).join(",")}`
+    `${type}-${games
+      .filter(({ type: t }) => t === type)
+      .map(({ name }) => name)
+      .join(",")}`
   );
+};
+
+const sendAllGames = (ws: WebSocket) => {
+  sendGames(ws, "draughts");
+  sendGames(ws, "py");
 };
 
 const setWord = (pyGame: PyGameType) => {
@@ -60,14 +68,21 @@ const setWord = (pyGame: PyGameType) => {
 };
 
 const sendToPlayers = (
-  pyGame: PyGameType,
+  game: GameType,
   message: string,
   excludePlayer?: WebSocket
 ) => {
+  const players =
+    game.type === "py"
+      ? (game.game as PyGameType).players
+      : [
+          (game.game as DraughtsGameType).player1,
+          (game.game as DraughtsGameType).player2,
+        ];
   wss.clients.forEach((client) => {
     if (
       client != excludePlayer &&
-      pyGame.players.includes(client) &&
+      players.includes(client) &&
       client.readyState === WebSocket.OPEN
     ) {
       client.send(message.toString());
@@ -77,87 +92,75 @@ const sendToPlayers = (
 
 wss.on("connection", (ws: WebSocket) => {
   console.log("connexion");
-  sendGames(ws);
-  sendGames(ws, "py");
+  sendAllGames(ws);
 
   ws.on("message", (message) => {
     const [type, arg0, arg1] = message.toString().split("-");
     const game = games.find((game) => game.name === arg0) as GameType;
+    const pyGame: PyGameType = game.game as PyGameType;
 
     switch (type) {
       case "create":
-        games.push({ name: arg0, turn: "white" });
+        const type = arg0 as GameType["type"];
+        games.push({
+          name: arg1,
+          type,
+          game:
+            type === "draughts"
+              ? { turn: "white" }
+              : {
+                  turn: "propose",
+                  players: [],
+                  word: "",
+                },
+        });
         wss.clients.forEach(
-          (client) => client.readyState === WebSocket.OPEN && sendGames(client)
+          (client) =>
+            client.readyState === WebSocket.OPEN && sendAllGames(client)
         );
         break;
       case "join":
-        if (game.player1) {
-          game.player2 = ws;
-          ws.send("color-black");
-          game.player1.send("message-La partie démarre !");
-          game.player1.send("color-white");
+        if (game.type === "draughts") {
+          const g: DraughtsGameType = game.game as DraughtsGameType;
+          if (g.player1) {
+            g.player2 = ws;
+            ws.send("color-black");
+            g.player1.send("message-La partie démarre !");
+            g.player1.send("color-white");
+          } else {
+            g.player1 = ws;
+            ws.send("message-En attente d'un adversaire");
+          }
         } else {
-          game.player1 = ws;
-          ws.send("message-En attente d'un adversaire");
+          const g: PyGameType = game.game as PyGameType;
+          g.players.push(ws);
         }
         ws.send(`game-${arg0}`);
         break;
+      // draughts specific
       case "piece":
       case "box":
       case "color":
         //send back the message to opponent
-        wss.clients.forEach((client) => {
-          const game = games.find(
-            ({ player1, player2 }) =>
-              client != ws && (player1 === client || player2 === client)
-          );
-
-          if (game && client.readyState === WebSocket.OPEN) {
-            client.send(message.toString());
-            changeTurn(game);
-          }
-        });
+        sendToPlayers(game, message.toString(), ws);
         break;
-      case "py":
-        const pyGame = pyGames.find((game) => game.name === arg0) as PyGameType;
-
-        switch (arg0) {
-          case "create":
-            pyGames.push({
-              name: arg1,
-              turn: "propose",
-              players: [],
-              word: "",
-            });
-            wss.clients.forEach(
-              (client) =>
-                client.readyState === WebSocket.OPEN && sendGames(client, "py")
-            );
-            break;
-          case "join":
-            pyGame.players.push(ws);
-            ws.send(`py-game-${arg1}`);
-            break;
-          case "joinguess":
-            pyGame.guesser = ws;
-            ws.send(`py-game-${arg1}`);
-            break;
-          case "joinpropose":
-            pyGame.proposer = ws;
-            ws.send(`py-game-${arg1}`);
-            setWord(pyGame);
-            break;
-          case "number":
-            //propage action to other players of this game
-            sendToPlayers(pyGame, message.toString(), ws);
-          case "propose":
-          case "guess":
-            changeTurnPy(pyGame);
-            break;
-          default:
-            console.log(`Error, ${type}-${arg0} is incorrect`);
-        }
+      //py specific
+      case "joinguess":
+        pyGame.guesser = ws;
+        ws.send(`py-game-${arg1}`);
+        break;
+      case "joinpropose":
+        pyGame.proposer = ws;
+        ws.send(`py-game-${arg1}`);
+        setWord(pyGame);
+        break;
+      case "propose":
+      case "guess":
+        changeTurn(game);
+      case "number":
+        //propage action to other players of this game
+        sendToPlayers(game, message.toString(), ws);
+        break;
       default:
         console.log(`Error, ${type} is incorrect`);
     }
