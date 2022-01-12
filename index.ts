@@ -49,7 +49,7 @@ const changeTurn = (g: GameType) =>
 
 const sendGames = (ws: WebSocket, type: GameType["type"]) => {
   ws.send(
-    `${type}-${games
+    `games-${type}-${games
       .filter(({ type: t }) => t === type)
       .map(({ name }) => name)
       .join(",")}`
@@ -72,6 +72,7 @@ const sendToPlayers = (
   message: string,
   excludePlayer?: WebSocket
 ) => {
+  console.log("game", game);
   const players =
     game.type === "py"
       ? (game.game as PyGameType).players
@@ -95,15 +96,16 @@ wss.on("connection", (ws: WebSocket) => {
   sendAllGames(ws);
 
   ws.on("message", (message) => {
-    const [type, arg0, arg1] = message.toString().split("-");
-    const game = games.find((game) => game.name === arg0) as GameType;
-    const pyGame: PyGameType = game.game as PyGameType;
+    const [action, name, ...args] = message.toString().split("-");
+    const game = games.find((game) => game.name === name) as GameType;
+    const pyGame: PyGameType = game?.game as PyGameType;
 
-    switch (type) {
+    switch (action) {
       case "create":
-        const type = arg0 as GameType["type"];
+        //create-name-type
+        const type = args[0] as GameType["type"];
         games.push({
-          name: arg1,
+          name,
           type,
           game:
             type === "draughts"
@@ -120,6 +122,7 @@ wss.on("connection", (ws: WebSocket) => {
         );
         break;
       case "join":
+        //join-name
         if (game.type === "draughts") {
           const g: DraughtsGameType = game.game as DraughtsGameType;
           if (g.player1) {
@@ -135,29 +138,30 @@ wss.on("connection", (ws: WebSocket) => {
           const g: PyGameType = game.game as PyGameType;
           g.players.push(ws);
         }
-        ws.send(`game-${arg0}`);
+        ws.send(`game-${name}-${game.type}`);
         break;
       // draughts specific
-      case "piece":
-      case "box":
-      case "color":
+      case "piece": // piece-name-1-2
+      case "box": // box-name-1-2
+        // case "color": // color-name-black, does not exists !! or is it ??
         //send back the message to opponent
         sendToPlayers(game, message.toString(), ws);
         break;
       //py specific
       case "joinguess":
         pyGame.guesser = ws;
-        ws.send(`py-game-${arg1}`);
+        //todo send wh are guessers, proposers and choosing to all clients
         break;
       case "joinpropose":
         pyGame.proposer = ws;
-        ws.send(`py-game-${arg1}`);
+        //todo send wh are guessers, proposers and choosing to all clients
         setWord(pyGame);
         break;
       case "propose":
       case "guess":
         changeTurn(game);
       case "number":
+      case "side":
         //propage action to other players of this game
         sendToPlayers(game, message.toString(), ws);
         break;
