@@ -7,6 +7,11 @@ const port = Number(process.env.PORT) || 443;
 
 const wss = new WebSocketServer({ port });
 
+type PlayerType = {
+  name: string | undefined;
+  webSocket: WebSocket;
+};
+
 type GameType = {
   name: string;
   type: "draughts" | "py";
@@ -22,8 +27,8 @@ type DraughtsGameType = {
 type PyGameType = {
   players: WebSocket[];
   guesser?: WebSocket;
-  proposer?: WebSocket;
-  turn: "guess" | "propose";
+  hinter?: WebSocket;
+  turn: "guess" | "hint";
   word: string;
 };
 
@@ -32,18 +37,44 @@ type WordType = {
   categories: string[];
 };
 
+const food = [
+  "Carotte",
+  "Lasagne",
+  "Patate",
+  "Pomme",
+  "Frite",
+  "Saucisse",
+  "Pomme de pain",
+  "Noisette",
+  "Noix",
+  "Girafe",
+  "Caille",
+];
+
+const cook = [
+  "grillée",
+  "au micro onde",
+  "pannée",
+  "frite",
+  "brulée",
+  "au barbeuk",
+  "crue",
+];
+
 const words: WordType[] = [
   { name: "patate", categories: ["végétal", "violence"] },
   { name: "poire", categories: ["végétal", "violence"] },
   { name: "bateau", categories: ["transport"] },
   { name: "fourgonnette", categories: ["transport"] },
   { name: "étoile", categories: ["espace"] },
+  { name: "planète", categories: ["espace"] },
 ];
 
+const connectedPlayers: PlayerType[] = [];
 const games: GameType[] = [];
 
 const changeTurn = (g: GameType) =>
-  ({ black: "white", white: "black", guess: "propose", propose: "guess" }[
+  ({ black: "white", white: "black", guess: "hint", hint: "guess" }[
     g.game.turn
   ]);
 
@@ -56,15 +87,32 @@ const sendGames = (ws: WebSocket, type: GameType["type"]) => {
   );
 };
 
+const changePlayerName = (ws: WebSocket, name: string) =>
+  (connectedPlayers.find(({ webSocket }) => webSocket === ws).name = name);
+
+const getPlayer = (player: WebSocket | string) =>
+  typeof player === "string"
+    ? connectedPlayers.find(({ name }) => name === player)
+    : connectedPlayers.find(({ webSocket }) => webSocket === player);
+
+const connectPlayer = (ws: WebSocket) => {
+  const name = `${food[Math.floor(Math.random() * food.length)]} ${
+    cook[Math.floor(Math.random() * cook.length)]
+  }`;
+  ws.send(`changename-${name}`);
+  connectedPlayers.push({ webSocket: ws, name });
+};
+
 const sendAllGames = (ws: WebSocket) => {
   sendGames(ws, "draughts");
   sendGames(ws, "py");
 };
 
 const setWord = (pyGame: PyGameType) => {
-  if (pyGame.proposer && pyGame.guesser)
+  if (pyGame.hinter && pyGame.guesser)
     pyGame.word = words[Math.floor(Math.random() * words.length)].name;
-  pyGame.proposer.send(`py-word-${pyGame.word}`);
+  console.log("pyGame.hinter", pyGame.hinter);
+  pyGame.hinter?.send(`word-${pyGame.word}`);
 };
 
 const sendToPlayers = (
@@ -72,7 +120,6 @@ const sendToPlayers = (
   message: string,
   excludePlayer?: WebSocket
 ) => {
-  console.log("game", game);
   const players =
     game.type === "py"
       ? (game.game as PyGameType).players
@@ -91,8 +138,15 @@ const sendToPlayers = (
   });
 };
 
+const sendPlayers = (game: GameType) => {
+  const pyGame = game.game as PyGameType;
+  const players = pyGame.players.map((p) => getPlayer(p).name).join(",");
+  sendToPlayers(game, `players-${players}`);
+};
+
 wss.on("connection", (ws: WebSocket) => {
   console.log("connexion");
+  connectPlayer(ws);
   sendAllGames(ws);
 
   ws.on("message", (message) => {
@@ -111,7 +165,7 @@ wss.on("connection", (ws: WebSocket) => {
             type === "draughts"
               ? { turn: "white" }
               : {
-                  turn: "propose",
+                  turn: "hint",
                   players: [],
                   word: "",
                 },
@@ -137,8 +191,15 @@ wss.on("connection", (ws: WebSocket) => {
         } else {
           const g: PyGameType = game.game as PyGameType;
           g.players.push(ws);
+          sendPlayers(game);
         }
         ws.send(`game-${name}-${game.type}`);
+        if (pyGame.guesser)
+          ws.send(`guesser-${getPlayer(pyGame.guesser).name}`);
+        if (pyGame.hinter) ws.send(`hinter-${getPlayer(pyGame.hinter).name}`);
+        break;
+      case "changename": // changename-playername
+        changePlayerName(ws, name);
         break;
       // draughts specific
       case "piece": // piece-name-1-2
@@ -149,15 +210,21 @@ wss.on("connection", (ws: WebSocket) => {
         break;
       //py specific
       case "joinguess":
-        pyGame.guesser = ws;
-        //todo send wh are guessers, proposers and choosing to all clients
+        if (!pyGame.guesser && pyGame.hinter !== ws) {
+          pyGame.guesser = ws;
+          sendToPlayers(game, `guesser-${getPlayer(ws).name}`);
+        }
+        //todo send wh are guessers, hinters and choosing to all clients
         break;
-      case "joinpropose":
-        pyGame.proposer = ws;
-        //todo send wh are guessers, proposers and choosing to all clients
+      case "joinhint":
+        if (!pyGame.hinter && pyGame.guesser !== ws) {
+          pyGame.hinter = ws;
+          sendToPlayers(game, `hinter-${getPlayer(ws).name}`);
+        }
+        //todo send wh are guessers, hinters and choosing to all clients
         setWord(pyGame);
         break;
-      case "propose":
+      case "hint":
       case "guess":
         changeTurn(game);
       case "number":
