@@ -1,90 +1,15 @@
 import WebSocket, { WebSocketServer } from "ws";
 import dotenv from "dotenv";
+import { changePlayerName, changeTurn, connectPlayer, getPlayer, sendAllGames, sendPlayers, sendToPlayers, setWord, } from "./actions.js";
 dotenv.config();
 const port = Number(process.env.PORT) || 443;
 const wss = new WebSocketServer({ port });
-const food = [
-    "Carotte",
-    "Lasagne",
-    "Patate",
-    "Pomme",
-    "Frite",
-    "Saucisse",
-    "Pomme de pain",
-    "Noisette",
-    "Noix",
-    "Girafe",
-    "Caille",
-];
-const cook = [
-    "grillée",
-    "au micro onde",
-    "pannée",
-    "frite",
-    "brulée",
-    "au barbeuk",
-    "crue",
-];
-const words = [
-    { name: "patate", categories: ["végétal", "violence"] },
-    { name: "poire", categories: ["végétal", "violence"] },
-    { name: "bateau", categories: ["transport"] },
-    { name: "fourgonnette", categories: ["transport"] },
-    { name: "étoile", categories: ["espace"] },
-    { name: "planète", categories: ["espace"] },
-];
 const connectedPlayers = [];
 const games = [];
-const changeTurn = (g) => ({ black: "white", white: "black", guess: "hint", hint: "guess" }[g.game.turn]);
-const sendGames = (ws, type) => {
-    ws.send(`games-${type}-${games
-        .filter(({ type: t }) => t === type)
-        .map(({ name }) => name)
-        .join(",")}`);
-};
-const changePlayerName = (ws, name) => (connectedPlayers.find(({ webSocket }) => webSocket === ws).name = name);
-const getPlayer = (player) => typeof player === "string"
-    ? connectedPlayers.find(({ name }) => name === player)
-    : connectedPlayers.find(({ webSocket }) => webSocket === player);
-const connectPlayer = (ws) => {
-    const name = `${food[Math.floor(Math.random() * food.length)]} ${cook[Math.floor(Math.random() * cook.length)]}`;
-    ws.send(`changename-${name}`);
-    connectedPlayers.push({ webSocket: ws, name });
-};
-const sendAllGames = (ws) => {
-    sendGames(ws, "draughts");
-    sendGames(ws, "py");
-};
-const setWord = (pyGame) => {
-    if (pyGame.hinter && pyGame.guesser)
-        pyGame.word = words[Math.floor(Math.random() * words.length)].name;
-    console.log("pyGame.hinter", pyGame.hinter);
-    pyGame.hinter?.send(`word-${pyGame.word}`);
-};
-const sendToPlayers = (game, message, excludePlayer) => {
-    const players = game.type === "py"
-        ? game.game.players
-        : [
-            game.game.player1,
-            game.game.player2,
-        ];
-    wss.clients.forEach((client) => {
-        if (client != excludePlayer &&
-            players.includes(client) &&
-            client.readyState === WebSocket.OPEN) {
-            client.send(message.toString());
-        }
-    });
-};
-const sendPlayers = (game) => {
-    const pyGame = game.game;
-    const players = pyGame.players.map((p) => getPlayer(p).name).join(",");
-    sendToPlayers(game, `players-${players}`);
-};
 wss.on("connection", (ws) => {
     console.log("connexion");
-    connectPlayer(ws);
-    sendAllGames(ws);
+    connectPlayer(connectedPlayers, ws);
+    sendAllGames(games, ws);
     ws.on("message", (message) => {
         const [action, name, ...args] = message.toString().split("-");
         const game = games.find((game) => game.name === name);
@@ -102,9 +27,11 @@ wss.on("connection", (ws) => {
                             turn: "hint",
                             players: [],
                             word: "",
+                            hints: [],
+                            guesses: [],
                         },
                 });
-                wss.clients.forEach((client) => client.readyState === WebSocket.OPEN && sendAllGames(client));
+                wss.clients.forEach((client) => client.readyState === WebSocket.OPEN && sendAllGames(games, client));
                 break;
             case "join":
                 //join-name
@@ -124,38 +51,36 @@ wss.on("connection", (ws) => {
                 else {
                     const g = game.game;
                     g.players.push(ws);
-                    sendPlayers(game);
+                    sendPlayers(connectedPlayers, wss, game);
                 }
                 ws.send(`game-${name}-${game.type}`);
                 if (pyGame.guesser)
-                    ws.send(`guesser-${pyGame.guesser}`);
+                    ws.send(`guesser-${getPlayer(connectedPlayers, pyGame.guesser).name}`);
                 if (pyGame.hinter)
-                    ws.send(`hinter-${pyGame.hinter}`);
+                    ws.send(`hinter-${getPlayer(connectedPlayers, pyGame.hinter).name}`);
                 break;
             case "changename": // changename-playername
-                changePlayerName(ws, name);
+                changePlayerName(connectedPlayers, ws, name);
                 break;
             // draughts specific
             case "piece": // piece-name-1-2
             case "box": // box-name-1-2
                 // case "color": // color-name-black, does not exists !! or is it ??
                 //send back the message to opponent
-                sendToPlayers(game, message.toString(), ws);
+                sendToPlayers(wss, game, message.toString(), ws);
                 break;
             //py specific
             case "joinguess":
                 if (!pyGame.guesser && pyGame.hinter !== ws) {
                     pyGame.guesser = ws;
-                    sendToPlayers(game, `guesser-${getPlayer(ws).name}`);
+                    sendToPlayers(wss, game, `guesser-${getPlayer(connectedPlayers, ws).name}`);
                 }
-                //todo send wh are guessers, hinters and choosing to all clients
                 break;
             case "joinhint":
                 if (!pyGame.hinter && pyGame.guesser !== ws) {
                     pyGame.hinter = ws;
-                    sendToPlayers(game, `hinter-${getPlayer(ws).name}`);
+                    sendToPlayers(wss, game, `hinter-${getPlayer(connectedPlayers, ws).name}`);
                 }
-                //todo send wh are guessers, hinters and choosing to all clients
                 setWord(pyGame);
                 break;
             case "hint":
@@ -164,7 +89,7 @@ wss.on("connection", (ws) => {
             case "number":
             case "side":
                 //propage action to other players of this game
-                sendToPlayers(game, message.toString(), ws);
+                sendToPlayers(wss, game, message.toString(), ws);
                 break;
             default:
                 console.log(`Error, ${type} is incorrect`);
