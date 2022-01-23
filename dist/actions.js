@@ -5,7 +5,10 @@ export const connectPlayer = (connectedPlayers, ws) => {
     ws.send(`changename-${name}`);
     connectedPlayers.push({ webSocket: ws, name });
 };
-export const changeTurn = (g) => ({ black: "white", white: "black", guess: "hint", hint: "guess" }[g.game.turn]);
+// export const changeTurn = (g: GameType) =>
+//   ({ black: "white", white: "black", guess: "hint", hint: "guess" }[
+//     g.game.turn
+//   ]);
 export const sendGames = (games, ws, type) => {
     ws.send(`games-${type}-${games
         .filter(({ type: t }) => t === type)

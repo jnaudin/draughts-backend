@@ -7,21 +7,33 @@ export const food = [
   "Pomme",
   "Frite",
   "Saucisse",
-  "Pomme de pain",
+  "Puce",
   "Noisette",
   "Noix",
   "Girafe",
   "Caille",
+  "Chatte",
+  "Chienne",
+  "Lionne",
+  "Oreille"
 ];
 
 export const cook = [
   "grillée",
-  "au micro onde",
   "pannée",
   "frite",
   "brulée",
-  "au barbeuk",
+  "kawaii",
   "crue",
+  "puante",
+  "moche",
+  "méchante",
+  "triste",
+  "cassée",
+  "géante",
+  "timide",
+  "discrète",
+  "balèze",
 ];
 
 export const words: WordType[] = [

@@ -1,6 +1,6 @@
 import WebSocket, { WebSocketServer } from "ws";
 import dotenv from "dotenv";
-import { changePlayerName, changeTurn, connectPlayer, getPlayer, sendAllGames, sendPlayers, sendToPlayers, setWord, } from "./actions.js";
+import { changePlayerName, connectPlayer, getPlayer, sendAllGames, sendPlayers, sendToPlayers, setWord, } from "./actions.js";
 dotenv.config();
 const port = Number(process.env.PORT) || 443;
 const wss = new WebSocketServer({ port });
@@ -84,12 +84,22 @@ wss.on("connection", (ws) => {
                 setWord(pyGame);
                 break;
             case "hint":
+                pyGame.hints.push(args[0]);
+                sendToPlayers(wss, game, `hints-${pyGame.hints.join(",")}`);
+                break;
             case "guess":
-                changeTurn(game);
+                pyGame.guesses.push(args[0]);
+                sendToPlayers(wss, game, `guesses-${pyGame.guesses.join(",")}`);
+                console.log(`guesses=${pyGame.guesses.join(",")}`);
+                break;
             case "number":
             case "side":
                 //propage action to other players of this game
-                sendToPlayers(wss, game, message.toString(), ws);
+                sendToPlayers(wss, game, message.toString());
+                break;
+            case "found":
+                //propage action to all players of this game
+                sendToPlayers(wss, game, message.toString());
                 break;
             default:
                 console.log(`Error, ${type} is incorrect`);

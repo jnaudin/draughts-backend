@@ -19,10 +19,10 @@ export const connectPlayer = (
   connectedPlayers.push({ webSocket: ws, name });
 };
 
-export const changeTurn = (g: GameType) =>
-  ({ black: "white", white: "black", guess: "hint", hint: "guess" }[
-    g.game.turn
-  ]);
+// export const changeTurn = (g: GameType) =>
+//   ({ black: "white", white: "black", guess: "hint", hint: "guess" }[
+//     g.game.turn
+//   ]);
 
 export const sendGames = (
   games: GameType[],
