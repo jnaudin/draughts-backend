@@ -24,7 +24,6 @@ wss.on("connection", (ws) => {
                     game: type === "draughts"
                         ? { turn: "white" }
                         : {
-                            turn: "hint",
                             players: [],
                             word: "",
                             hints: [],
@@ -71,6 +70,7 @@ wss.on("connection", (ws) => {
                 break;
             //py specific
             case "joinguess":
+                console.log("joinGuess");
                 if (!pyGame.guesser && pyGame.hinter !== ws) {
                     pyGame.guesser = ws;
                     sendToPlayers(wss, game, `guesser-${getPlayer(connectedPlayers, ws).name}`);
@@ -84,6 +84,7 @@ wss.on("connection", (ws) => {
                 setWord(pyGame);
                 break;
             case "hint":
+                console.log("hints", args[0]);
                 pyGame.hints.push(args[0]);
                 sendToPlayers(wss, game, `hints-${pyGame.hints.join(",")}`);
                 break;
@@ -93,12 +94,22 @@ wss.on("connection", (ws) => {
                 console.log(`guesses=${pyGame.guesses.join(",")}`);
                 break;
             case "number":
+                pyGame.number = +args[0];
             case "side":
-                //propage action to other players of this game
                 sendToPlayers(wss, game, message.toString());
                 break;
             case "found":
-                //propage action to all players of this game
+                if (args[0] === "OK" || (args[0] === "KO" && pyGame.hints.length === pyGame.number)) {
+                    sendToPlayers(wss, game, `word-${pyGame.word}`, ws);
+                    setTimeout(() => {
+                        sendToPlayers(wss, game, `reset`);
+                        pyGame.word = "";
+                        pyGame.hints = [];
+                        pyGame.guesses = [];
+                        pyGame.hinter = undefined;
+                        pyGame.guesser = undefined;
+                    }, 5000);
+                }
                 sendToPlayers(wss, game, message.toString());
                 break;
             default:

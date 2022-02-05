@@ -21,10 +21,10 @@ export type PyGameType = {
   players: WebSocket[];
   guesser?: WebSocket;
   hinter?: WebSocket;
-  turn: "guess" | "hint";
   word: string;
   hints: string[];
   guesses: string[];
+  number?: number;
 };
 
 export type WordType = {
