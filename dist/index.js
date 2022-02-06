@@ -70,7 +70,6 @@ wss.on("connection", (ws) => {
                 break;
             //py specific
             case "joinguess":
-                console.log("joinGuess");
                 if (!pyGame.guesser && pyGame.hinter !== ws) {
                     pyGame.guesser = ws;
                     sendToPlayers(wss, game, `guesser-${getPlayer(connectedPlayers, ws).name}`);
@@ -84,14 +83,12 @@ wss.on("connection", (ws) => {
                 setWord(pyGame);
                 break;
             case "hint":
-                console.log("hints", args[0]);
                 pyGame.hints.push(args[0]);
                 sendToPlayers(wss, game, `hints-${pyGame.hints.join(",")}`);
                 break;
             case "guess":
                 pyGame.guesses.push(args[0]);
                 sendToPlayers(wss, game, `guesses-${pyGame.guesses.join(",")}`);
-                console.log(`guesses=${pyGame.guesses.join(",")}`);
                 break;
             case "number":
                 pyGame.number = +args[0];

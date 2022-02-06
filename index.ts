@@ -93,7 +93,6 @@ wss.on("connection", (ws: WebSocket) => {
         break;
       //py specific
       case "joinguess":
-        console.log("joinGuess");
         if (!pyGame.guesser && pyGame.hinter !== ws) {
           pyGame.guesser = ws;
           sendToPlayers(
@@ -115,14 +114,12 @@ wss.on("connection", (ws: WebSocket) => {
         setWord(pyGame);
         break;
       case "hint":
-        console.log("hints", args[0]);
         pyGame.hints.push(args[0]);
         sendToPlayers(wss, game, `hints-${pyGame.hints.join(",")}`);
         break;
       case "guess":
         pyGame.guesses.push(args[0]);
         sendToPlayers(wss, game, `guesses-${pyGame.guesses.join(",")}`);
-        console.log(`guesses=${pyGame.guesses.join(",")}`);
         break;
       case "number":
         pyGame.number = +args[0];
